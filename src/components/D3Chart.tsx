@@ -43,6 +43,8 @@ const D3ChartComponent = ({
   const playIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const playIndexRef = useRef(0);
   const isPlayingRef = useRef(false);
+  const hasAnimatedRef = useRef(false);
+  const lastWidthRef = useRef(0);
   const onPlayFinishRef = useRef(onPlayFinish);
   onPlayFinishRef.current = onPlayFinish;
   const onHoverRef = useRef(onHover);
@@ -104,6 +106,22 @@ const D3ChartComponent = ({
     xRef.current = x as any;
     yRef.current = y;
 
+    // Grid rendering (rendered first to be at the bottom layer)
+    const vGrid = svg.append('g').attr('class', 'grid grid-vertical').attr('transform', `translate(0,${H})`)
+      .call(d3.axisBottom(x).tickSize(-H).tickFormat(() => ''))
+      .selectAll('line').attr('stroke', '#f8fafc');
+    svg.select('.grid-vertical .domain').remove();
+    vGrid.style('display', showGrid ? 'block' : 'none');
+
+    const step = config.yMax / numRows;
+    const tickValues = [0, step, step * 2, step * 3, config.yMax];
+
+    const hGrid = svg.append('g').attr('class', 'grid grid-horizontal')
+      .call(d3.axisLeft(y).tickValues(tickValues).tickSize(-W).tickFormat(() => ''))
+      .selectAll('line').attr('stroke', '#f1f5f9');
+    svg.select('.grid-horizontal .domain').remove();
+    hGrid.style('display', showGrid ? 'block' : 'none');
+
     // Defs / Gradients
     const defs = svgEl.append('defs');
     const pastG = defs.append('linearGradient').attr('id', 'past-gradient')
@@ -134,29 +152,12 @@ const D3ChartComponent = ({
         .attr('d', `M ${W - 4}, 1 L ${W + 4}, 1 L ${W}, -6 Z`)
         .attr('fill', '#475569');
 
-      // Labels (Moved inside the chart area)
+      // Labels (Past / Future)
       svg.append('text').attr('x', sepX - 12).attr('y', 25).attr('text-anchor', 'end')
         .attr('font-size', '13px').attr('font-weight', '700').attr('fill', '#94a3b8').text('Past');
       svg.append('text').attr('x', sepX + 12).attr('y', 25).attr('text-anchor', 'start')
         .attr('font-size', '13px').attr('font-weight', '700').attr('fill', config.gradients.future.top).text('Future');
     }
-
-    // Grid
-    const vGrid = svg.append('g').attr('class', 'grid grid-vertical').attr('transform', `translate(0,${H})`)
-      .call(d3.axisBottom(x).tickSize(-H).tickFormat(() => ''))
-      .selectAll('line').attr('stroke', '#f8fafc');
-    svg.select('.grid-vertical .domain').remove();
-    vGrid.style('display', showGrid ? 'block' : 'none');
-
-    // Ticks (Equal distance)
-    const step = config.yMax / numRows;
-    const tickValues = [0, step, step * 2, step * 3, config.yMax];
-
-    const hGrid = svg.append('g').attr('class', 'grid grid-horizontal')
-      .call(d3.axisLeft(y).tickValues(tickValues).tickSize(-W).tickFormat(() => ''))
-      .selectAll('line').attr('stroke', '#f1f5f9');
-    svg.select('.grid-horizontal .domain').remove();
-    hGrid.style('display', showGrid ? 'block' : 'none');
 
     // X Axis
     svg.append('g').attr('transform', `translate(0,${H})`)
@@ -206,16 +207,22 @@ const D3ChartComponent = ({
       .attr('x', d => x(d.year.toString())!)
       .attr('width', barWidth)
       .attr('y', H).attr('height', 0)
-      .attr('rx', 6).attr('ry', 6)
+      .attr('rx', isMobile ? 3 : 6).attr('ry', isMobile ? 3 : 6)
       .attr('fill', d => d.status === 'past' ? 'url(#past-gradient)' : 'url(#future-gradient)')
       .style('cursor', 'pointer')
       .on('click', (event, d) => {
         const idx = data.findIndex(nd => nd.year === d.year);
         onBarClickRef.current?.(idx);
       })
-      .transition().duration(1200).ease(d3.easeCubicOut)
+      .transition().duration(hasAnimatedRef.current ? 0 : 1200).ease(d3.easeCubicOut)
       .attr('y', d => y(d.value))
       .attr('height', d => H - y(d.value));
+
+    if (!hasAnimatedRef.current) {
+      setTimeout(() => {
+        hasAnimatedRef.current = true;
+      }, 1200);
+    }
 
     // Labels (Always rendered, visibility controlled by prop)
     svg.selectAll('.bar-label').data(data).enter().append('text')
@@ -236,14 +243,15 @@ const D3ChartComponent = ({
     // Projection line
     svg.append('line').attr('x1', 0).attr('x2', W).attr('y1', projY).attr('y2', projY)
       .attr('stroke', config.gradients.future.top).attr('stroke-width', 1.5)
-      .attr('stroke-dasharray', '5,5').attr('opacity', 0.3).lower();
+      .attr('stroke-dasharray', '5,5').attr('opacity', 0.3);
 
     // Tooltip
-    let tooltip = d3.select<HTMLDivElement, unknown>('.d3-tooltip');
+    // Use the container as the tooltip parent for absolute positioning
+    let tooltip = d3.select(containerRef.current).select<HTMLDivElement>('.d3-tooltip');
     if (tooltip.empty()) {
-      tooltip = d3.select('body').append('div').attr('class', 'd3-tooltip') as d3.Selection<HTMLDivElement, unknown, HTMLElement, undefined>;
+      tooltip = d3.select(containerRef.current).append('div').attr('class', 'd3-tooltip') as any;
     }
-    tooltipRef.current = tooltip as d3.Selection<HTMLDivElement, unknown, HTMLElement, undefined>;
+    tooltipRef.current = tooltip;
 
     // Crosshair overlay
     const overlay = svg.append('rect').attr('width', W).attr('height', H)
@@ -297,41 +305,44 @@ const D3ChartComponent = ({
         const barX = x(d.year.toString())!;
         const barY = y(d.value);
 
-        // Calculate position relative to the page
-        const absoluteX = rect.left + margin.left + barX;
-        const absoluteY = rect.top + margin.top + barY;
+        // Calculate position relative to the CONTAINER
+        const absoluteX = margin.left + barX;
+        const absoluteY = margin.top + barY;
 
         const growthColor = d.growth >= 0 ? '#027a48' : '#b42318';
         const growthPrefix = d.growth > 0 ? '+' : '';
 
         // Determine horizontal alignment to keep tooltip in view
-        let leftValue = absoluteX - 100; // Center the 200px width tooltip
-        if (leftValue < 10) leftValue = 10;
-        if (leftValue + 200 > window.innerWidth) leftValue = window.innerWidth - 210;
+        const tooltipWidth = isMobile ? 140 : 200;
+        let leftValue = absoluteX - (tooltipWidth / 2);
+        if (leftValue < 5) leftValue = 5;
+        if (leftValue + tooltipWidth > totalWidth) leftValue = totalWidth - tooltipWidth - 5;
 
         tooltipRef.current.style('display', 'block').style('opacity', '1')
           .style('background', '#ffffff')
-          .style('padding', '12px 16px')
+          .style('padding', isMobile ? '8px 10px' : '12px 16px')
           .style('border', '1px solid #eaecf0')
           .style('border-radius', '8px')
           .style('box-shadow', '0 12px 16px -4px rgba(16, 24, 40, 0.08), 0 4px 6px -2px rgba(16, 24, 40, 0.03)')
-          .style('position', 'fixed')
+          .style('position', 'absolute')
           .style('left', `${leftValue}px`)
-          .style('top', `${absoluteY - 110}px`) // Position above the bar
+          .style('top', `${absoluteY - (isMobile ? 85 : 110)}px`) // Position above the bar
+          .style('z-index', '100')
+          .style('pointer-events', 'none')
           .style('transition', 'left 0.1s ease-out, top 0.1s ease-out')
           .html(`
-            <div style="display: flex; flex-direction: column; gap: 8px; min-width: 170px;">
+            <div style="display: flex; flex-direction: column; gap: ${isMobile ? '4px' : '8px'}; min-width: ${isMobile ? '120px' : '170px'}; text-align: left;">
               <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span style="color: #667085; font-size: 13px; font-weight: 500;">Date:</span>
-                <span style="font-weight: 700; color: #101828; font-size: 13px;">Dec 31, ${d.year}</span>
+                <span style="color: #667085; font-size: ${isMobile ? '11px' : '13px'}; font-weight: 500;">Date:</span>
+                <span style="font-weight: 700; color: #101828; font-size: ${isMobile ? '11px' : '13px'};">Dec 31, ${d.year}</span>
               </div>
               <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span style="color: #667085; font-size: 13px; font-weight: 500;">${config.title}:</span>
-                <span style="font-weight: 700; color: #101828; font-size: 13px;">$${d.value.toFixed(1)}B</span>
+                <span style="color: #667085; font-size: ${isMobile ? '11px' : '13px'}; font-weight: 500;">${config.title}:</span>
+                <span style="font-weight: 700; color: #101828; font-size: ${isMobile ? '11px' : '13px'};">$${d.value.toFixed(1)}B</span>
               </div>
               <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span style="color: #667085; font-size: 13px; font-weight: 500;">% YoY:</span>
-                <span style="font-weight: 700; color: ${growthColor}; font-size: 13px;">${growthPrefix}${d.growth}%</span>
+                <span style="color: #667085; font-size: ${isMobile ? '11px' : '13px'}; font-weight: 500;">% YoY:</span>
+                <span style="font-weight: 700; color: ${growthColor}; font-size: ${isMobile ? '11px' : '13px'};">${growthPrefix}${d.growth}%</span>
               </div>
             </div>
           `);
@@ -367,7 +378,22 @@ const D3ChartComponent = ({
   // Build chart on mount / config change
   useEffect(() => {
     buildChart();
-    const handleResize = () => buildChart();
+    const handleResize = () => {
+      if (!containerRef.current) return;
+      const newWidth = containerRef.current.getBoundingClientRect().width;
+      // Only rebuild if width changes significantly (> 20px)
+      // This ignores small height changes like address bar hiding on mobile
+      if (Math.abs(newWidth - lastWidthRef.current) > 20) {
+        lastWidthRef.current = newWidth;
+        buildChart();
+      }
+    };
+    
+    // Initial width capture
+    if (containerRef.current) {
+      lastWidthRef.current = containerRef.current.getBoundingClientRect().width;
+    }
+
     window.addEventListener('resize', handleResize);
     return () => {
       window.removeEventListener('resize', handleResize);
@@ -502,7 +528,7 @@ const D3ChartComponent = ({
     };
   }, [isPlaying, config]);
 
-  return <div ref={containerRef} style={{ width: '100%' }} />;
+  return <div ref={containerRef} style={{ width: '100%', position: 'relative' }} />;
 };
 
 export default memo(D3ChartComponent);
