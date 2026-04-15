@@ -251,7 +251,7 @@ const D3ChartComponent = ({
     if (tooltip.empty()) {
       tooltip = d3.select(containerRef.current).append('div').attr('class', 'd3-tooltip') as any;
     }
-    tooltipRef.current = tooltip;
+    tooltipRef.current = tooltip as any;
 
     // Crosshair overlay
     const overlay = svg.append('rect').attr('width', W).attr('height', H)
