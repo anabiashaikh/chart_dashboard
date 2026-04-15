@@ -102,7 +102,6 @@ export const CHARTS_CONFIG: Record<string, ChartConfig> = {
       trend: { label: 'Trend', value: 'Strong Growth', cls: 'growth-trend' }
     },
     projectionTarget: 337,
-    projectionTarget: 337,
     yMax: 450,
     data: [
       { year: 2014, value: 33.6, growth: 8, status: 'past' },
@@ -145,7 +144,6 @@ export const CHARTS_CONFIG: Record<string, ChartConfig> = {
       trend: { label: 'Trend', value: 'Strong Growth', cls: 'growth-trend' }
     },
     projectionTarget: 249,
-    projectionTarget: 249,
     yMax: 350,
     data: [
       { year: 2014, value: 22.1, growth: 1, status: 'past' },
@@ -187,7 +185,6 @@ export const CHARTS_CONFIG: Record<string, ChartConfig> = {
       stat3: { label: 'Next 3 Years Avg', value: '+19.8%', cls: 'growth-pos' },
       trend: { label: 'Trend', value: 'Strong Growth', cls: 'growth-trend' }
     },
-    projectionTarget: 33.4,
     projectionTarget: 33.4,
     yMax: 45,
     data: [
@@ -271,7 +268,6 @@ export const CHARTS_CONFIG: Record<string, ChartConfig> = {
       trend: { label: 'Trend', value: 'Accelerating', cls: 'growth-trend' }
     },
     projectionTarget: 115,
-    projectionTarget: 115,
     yMax: 150,
     data: [
       { year: 2020, value: 32.0, growth: 12, status: 'past' },
@@ -305,7 +301,6 @@ export const CHARTS_CONFIG: Record<string, ChartConfig> = {
       stat3: { label: 'Next 3 Years Avg', value: '+18.5%', cls: 'growth-pos' },
       trend: { label: 'Trend', value: 'Strong Growth', cls: 'growth-trend' }
     },
-    projectionTarget: 420,
     projectionTarget: 420,
     yMax: 550,
     data: [
@@ -349,7 +344,6 @@ export const CHARTS_CONFIG: Record<string, ChartConfig> = {
       trend: { label: 'Trend', value: 'Strong Growth', cls: 'growth-trend' }
     },
     projectionTarget: 290,
-    projectionTarget: 290,
     yMax: 400,
     data: [
       { year: 2014, value: 27.8, growth: 9, status: 'past' },
@@ -391,7 +385,6 @@ export const CHARTS_CONFIG: Record<string, ChartConfig> = {
       stat3: { label: 'Next 3 Years Avg', value: '+20.0%', cls: 'growth-pos' },
       trend: { label: 'Trend', value: 'Strong Growth', cls: 'growth-trend' }
     },
-    projectionTarget: 195,
     projectionTarget: 195,
     yMax: 260,
     data: [
@@ -435,7 +428,6 @@ export const CHARTS_CONFIG: Record<string, ChartConfig> = {
       trend: { label: 'Trend', value: 'Consistent', cls: 'growth-trend' }
     },
     projectionTarget: 4.2,
-    projectionTarget: 4.2,
     yMax: 5.5,
     data: [
       { year: 2014, value: 1.24, growth: 11, status: 'past' },
@@ -475,7 +467,6 @@ export const CHARTS_CONFIG: Record<string, ChartConfig> = {
       stat3: { label: 'Next 3 Years Avg', value: '+16.0%', cls: 'growth-pos' },
       trend: { label: 'Trend', value: 'Increasing', cls: 'growth-trend' }
     },
-    projectionTarget: 85,
     projectionTarget: 85,
     yMax: 120,
     data: [
@@ -519,7 +510,6 @@ export const CHARTS_CONFIG: Record<string, ChartConfig> = {
       trend: { label: 'Trend', value: 'Expanding', cls: 'growth-trend' }
     },
     projectionTarget: 65,
-    projectionTarget: 65,
     yMax: 90,
     data: [
       { year: 2014, value: 5.5, growth: 20, status: 'past' },
@@ -560,7 +550,6 @@ export const CHARTS_CONFIG: Record<string, ChartConfig> = {
       stat3: { label: 'Next 3 Yrs Avg Change', value: '-18.5%', cls: 'growth-pos' },
       trend: { label: 'Trend', value: 'Deleveraging', cls: 'growth-trend' }
     },
-    projectionTarget: 10,
     projectionTarget: 10,
     yMax: 90,
     data: [
