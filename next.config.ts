@@ -1,9 +1,6 @@
-import type { NextConfig } from "next";
-
-const nextConfig: NextConfig = {
-  devIndicators: {
-    buildActivity: false,
-  },
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  /* config options here */
 };
 
 export default nextConfig;
