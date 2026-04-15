@@ -206,7 +206,7 @@ const D3ChartComponent = ({
       .attr('x', d => x(d.year.toString())!)
       .attr('width', barWidth)
       .attr('y', H).attr('height', 0)
-      .attr('rx', 3).attr('ry', 3)
+      .attr('rx', 6).attr('ry', 6)
       .attr('fill', d => d.status === 'past' ? 'url(#past-gradient)' : 'url(#future-gradient)')
       .style('cursor', 'pointer')
       .on('click', (event, d) => {
