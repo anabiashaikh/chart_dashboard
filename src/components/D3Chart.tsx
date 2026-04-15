@@ -63,10 +63,10 @@ const D3ChartComponent = ({
 
     const isMobile = totalWidth <= 640;
     const margin = {
-      top: 80, 
-      right: isMobile ? 45 : 100, 
+      top: 80,
+      right: isMobile ? 45 : 100,
       bottom: 50,
-      left: isMobile ? 1 : 30 
+      left: isMobile ? 1 : 30
     };
 
     // Responsive grid height based on screen size
@@ -78,7 +78,7 @@ const D3ChartComponent = ({
     }
     const numRows = 4;
     const innerH = numRows * rowHeight;
-    
+
     widthRef.current = totalWidth - margin.left - margin.right;
     heightRef.current = innerH;
     const W = widthRef.current;
@@ -96,11 +96,11 @@ const D3ChartComponent = ({
     const x = d3.scaleBand()
       .domain(data.map(d => d.year.toString()))
       .range([0, W])
-      .paddingInner(isMobile ? 0.35 : 0.4) 
+      .paddingInner(isMobile ? 0.35 : 0.4)
       .paddingOuter(0.2);
 
     const y = d3.scaleLinear().domain([0, config.yMax]).range([H, 0]);
-    
+
     xRef.current = x as any;
     yRef.current = y;
 
@@ -177,7 +177,7 @@ const D3ChartComponent = ({
           const isRatio = config.id.includes('ratio');
           const unit = (isEPS || isRatio) ? '' : 'B';
           const formatted = isEPS ? val.toFixed(1) : val.toFixed(0);
-          
+
           if (val === config.yMax) return ''; // Hide top tick label as it's the green pill
           return `$${formatted}${unit}`;
         })
@@ -254,10 +254,28 @@ const D3ChartComponent = ({
     const hLine = ig.append('line').attr('x1', 0).attr('x2', W).attr('stroke', '#475569')
       .attr('stroke-width', 1.5).attr('stroke-dasharray', '4,4').style('opacity', 0);
 
+    // Y-Axis Interactive Label (Pill at the right corner)
+    const yLabel = ig.append('g').style('opacity', 0);
+    yLabel.append('rect')
+      .attr('x', 0).attr('y', -10).attr('width', 52).attr('height', 20).attr('rx', 10)
+      .attr('fill', '#475569');
+    const yLabelText = yLabel.append('text')
+      .attr('x', 26).attr('y', 4).attr('fill', 'white').attr('font-size', '10px')
+      .attr('text-anchor', 'middle').attr('font-weight', '700');
+
     overlay.on('mousemove', (event: MouseEvent) => {
       const [mx, my] = d3.pointer(event);
       vLine.raise().attr('x1', mx).attr('x2', mx).attr('y1', 0).attr('y2', H).style('opacity', 1);
       hLine.raise().attr('x1', 0).attr('x2', W).attr('y1', my).attr('y2', my).style('opacity', 1);
+
+      // Update Y-Axis Pill Label
+      const yVal = y.invert(my);
+      const unit = config.yMax >= 1000 ? 'T' : 'B';
+      const factor = config.yMax >= 1000 ? 1000 : 1;
+      const formattedVal = (yVal / factor).toFixed(1);
+      
+      yLabel.attr('transform', `translate(${W + 12}, ${my})`).style('opacity', 1);
+      yLabelText.text(`$${formattedVal}${unit}`);
 
       const domain = x.domain();
       const range = x.range();
@@ -321,6 +339,7 @@ const D3ChartComponent = ({
     }).on('mouseout', () => {
       vLine.style('opacity', 0);
       hLine.style('opacity', 0);
+      yLabel.style('opacity', 0);
       svg.selectAll('.bar').classed('bar-highlight', false);
       tooltipRef.current?.style('display', 'none');
       onHoverRef.current?.(null);
