@@ -195,12 +195,13 @@ body {
   top: 60px;
   left: 60px;
   width: 260px;
-  background: white;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.95) 100%);
+  backdrop-filter: blur(8px);
   padding: 16px;
   border-radius: 12px;
   box-shadow: var(--shadow-lg);
   z-index: 10;
-  border: 1px solid var(--border-color);
+  border: 1px solid rgba(234, 236, 240, 0.5);
 }
 
 .info-item {

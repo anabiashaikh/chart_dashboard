@@ -54,8 +54,22 @@ const D3ChartComponent = ({
   const onPlayStepRef = useRef(onPlayStep);
   onPlayStepRef.current = onPlayStep;
 
+  // Use a ref for barColor to allow buildChart to access the latest value 
+  // without triggering a full rebuild on every color move.
+  const barColorRef = useRef(barColor);
+  barColorRef.current = barColor;
+
+  // Refs to avoid stale closures in interaction handlers
+  const showTooltipRef = useRef(showTooltip);
+  showTooltipRef.current = showTooltip;
+  const showLabelsRef = useRef(showLabels);
+  showLabelsRef.current = showLabels;
+  const showPctRef = useRef(showPct);
+  showPctRef.current = showPct;
+
   const buildChart = useCallback(() => {
     if (!containerRef.current) return;
+    const currentBarColor = barColorRef.current;
     const container = d3.select(containerRef.current);
     container.selectAll('*').remove();
 
@@ -95,8 +109,49 @@ const D3ChartComponent = ({
     const svg = svgEl.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
     svgRef.current = svg;
 
+    // Define Gradients in <defs>
+    const defs = svgEl.append('defs');
+    const gradId = `barGradient-${config.id.replace(/\s+/g, '-')}`;
+    const activeColor = currentBarColor || config.gradients.future.top;
+
+    const barGrad = defs.append('linearGradient')
+      .attr('id', gradId)
+      .attr('gradientUnits', 'userSpaceOnUse')
+      .attr('x1', 0).attr('y1', 0)
+      .attr('x2', W).attr('y2', 0);
+
+    barGrad.append('stop')
+      .attr('class', 'stop-left')
+      .attr('offset', '0%')
+      .attr('stop-color', activeColor)
+      .attr('stop-opacity', 0.8);
+
+    barGrad.append('stop')
+      .attr('class', 'stop-right')
+      .attr('offset', '100%')
+      .attr('stop-color', activeColor);
+
+    // Define Future Section Gradient (Very soft tint)
+    const futureGradId = `futureGradient-${config.id.replace(/\s+/g, '-')}`;
+    const futureGrad = defs.append('linearGradient')
+      .attr('id', futureGradId)
+      .attr('x1', '0%').attr('y1', '0%')
+      .attr('x2', '0%').attr('y2', '100%');
+
+    futureGrad.append('stop')
+      .attr('class', 'future-stop-top')
+      .attr('offset', '0%')
+      .attr('stop-color', activeColor)
+      .attr('stop-opacity', 0.08);
+
+    futureGrad.append('stop')
+      .attr('class', 'future-stop-bottom')
+      .attr('offset', '100%')
+      .attr('stop-color', activeColor)
+      .attr('stop-opacity', 0.02);
+
     const x = d3.scaleBand()
-      .domain(data.map(d => d.year.toString()))
+      .domain(data.map(d => d.period.toString()))
       .range([0, W])
       .paddingInner(isMobile ? 0.35 : 0.4)
       .paddingOuter(0.2);
@@ -122,41 +177,49 @@ const D3ChartComponent = ({
     svg.select('.grid-horizontal .domain').remove();
     hGrid.style('display', showGrid ? 'block' : 'none');
 
-    // Defs / Gradients
-    const defs = svgEl.append('defs');
-    const pastG = defs.append('linearGradient').attr('id', 'past-gradient')
-      .attr('x1', '0%').attr('y1', '0%').attr('x2', '0%').attr('y2', '100%');
-    pastG.append('stop').attr('offset', '0%').attr('stop-color', barColor || config.gradients.past.top);
-    pastG.append('stop').attr('offset', '100%').attr('stop-color', config.gradients.past.bottom);
-
-    const futG = defs.append('linearGradient').attr('id', 'future-gradient')
-      .attr('x1', '0%').attr('y1', '0%').attr('x2', '0%').attr('y2', '100%');
-    futG.append('stop').attr('offset', '0%').attr('stop-color', config.gradients.future.top);
-    futG.append('stop').attr('offset', '100%').attr('stop-color', config.gradients.future.bottom);
-
     // Future overlay & Indicators
     const futureStartIndex = data.findIndex(d => d.status === 'future');
     if (futureStartIndex > 0) {
-      const sepX = (x(data[futureStartIndex - 1].year.toString())! + x(data[futureStartIndex].year.toString())!) / 2 + (x.bandwidth() / 2);
+      const sepX = (x(data[futureStartIndex - 1].period.toString())! + x(data[futureStartIndex].period.toString())!) / 2 + (x.bandwidth() / 2);
 
-      // Background tint
+      // Background gradient tint
       svg.append('rect').attr('x', sepX).attr('y', 0).attr('width', W - sepX)
-        .attr('height', H).attr('fill', config.gradients.future.top).attr('opacity', 0.08);
+        .attr('height', H).attr('fill', `url(#${futureGradId})`);
 
-      // Top Border Line for Future Section (at the very top)
-      svg.append('line').attr('x1', sepX).attr('x2', W).attr('y1', 0).attr('y2', 0)
-        .attr('stroke', '#00AD07').attr('stroke-width', 3);
+      // Projection dash connecting the last bar to the pill
+      const projY = y(config.projectionTarget);
+      const lastBarX = x(data[data.length - 1].period.toString())! + x.bandwidth();
+      svg.append('line').attr('class', 'projection-dash')
+        .attr('x1', lastBarX).attr('x2', W + 12).attr('y1', projY).attr('y2', projY)
+        .attr('stroke', activeColor).attr('stroke-width', 2).attr('stroke-dasharray', '3,3');
 
-      // Top Arrow (Sharper Triangle)
+      // Structural Border Lines (Medium Grey)
+      const borderColor = '#94a3b8';
+
+      // Vertical Border Line at the end
+      svg.append('line').attr('class', 'future-border-line')
+        .attr('x1', W).attr('x2', W).attr('y1', 0).attr('y2', H)
+        .attr('stroke', borderColor).attr('stroke-width', 1.5);
+
+      // Top Border Line for Future Section (at the very top) - Stay Themed
+      svg.append('line').attr('class', 'future-top-line').attr('x1', sepX).attr('x2', W).attr('y1', 0).attr('y2', 0)
+        .attr('stroke', activeColor).attr('stroke-width', 3);
+
+      // Top Arrow (Sharper Triangle - Located at the border corner)
       svg.append('path')
-        .attr('d', `M ${W - 4}, 1 L ${W + 4}, 1 L ${W}, -6 Z`)
-        .attr('fill', '#475569');
+        .attr('d', `M ${W - 4}, 0 L ${W + 4}, 0 L ${W}, -6 Z`)
+        .attr('fill', borderColor);
+
+      // Bottom Border Line
+      svg.append('line').attr('class', 'chart-bottom-border-line')
+        .attr('x1', 0).attr('x2', W).attr('y1', H).attr('y2', H)
+        .attr('stroke', borderColor).attr('stroke-width', 1.5);
 
       // Labels (Past / Future)
       svg.append('text').attr('x', sepX - 12).attr('y', 25).attr('text-anchor', 'end')
         .attr('font-size', '13px').attr('font-weight', '700').attr('fill', '#94a3b8').text('Past');
-      svg.append('text').attr('x', sepX + 12).attr('y', 25).attr('text-anchor', 'start')
-        .attr('font-size', '13px').attr('font-weight', '700').attr('fill', config.gradients.future.top).text('Future');
+      svg.append('text').attr('class', 'future-text-label').attr('x', sepX + 12).attr('y', 25).attr('text-anchor', 'start')
+        .attr('font-size', '13px').attr('font-weight', '700').attr('fill', activeColor).text('Future');
     }
 
     // X Axis
@@ -189,14 +252,9 @@ const D3ChartComponent = ({
     // Projection box
     const projY = y(config.projectionTarget);
 
-    // Tiny dash connecting chart to the box
-    svg.append('line')
-      .attr('x1', W).attr('x2', W + 12).attr('y1', projY).attr('y2', projY)
-      .attr('stroke', '#00AD07').attr('stroke-width', 2).attr('stroke-dasharray', '2,2');
-
     const hG = svg.append('g').attr('transform', `translate(${W + 12},${projY})`);
-    hG.append('rect').attr('x', 0).attr('y', -11).attr('width', 52).attr('height', 22).attr('rx', 11)
-      .attr('fill', '#00AD07');
+    hG.append('rect').attr('class', 'projection-pill').attr('x', 0).attr('y', -11).attr('width', 52).attr('height', 22).attr('rx', 11)
+      .attr('fill', activeColor);
     hG.append('text').attr('x', 26).attr('y', 5).attr('fill', 'white').attr('font-size', isMobile ? '10px' : '11px')
       .attr('text-anchor', 'middle').attr('font-weight', '700').text(`$${config.projectionTarget}B`);
 
@@ -204,49 +262,46 @@ const D3ChartComponent = ({
     const barWidth = x.bandwidth();
     svg.selectAll('.bar').data(data).enter().append('rect')
       .attr('class', 'bar')
-      .attr('x', d => x(d.year.toString())!)
+      .attr('x', d => x(d.period.toString())!)
       .attr('width', barWidth)
       .attr('y', H).attr('height', 0)
       .attr('rx', isMobile ? 3 : 6).attr('ry', isMobile ? 3 : 6)
-      .attr('fill', d => d.status === 'past' ? 'url(#past-gradient)' : 'url(#future-gradient)')
+      .attr('fill', `url(#${gradId})`)
       .style('cursor', 'pointer')
       .on('click', (event, d) => {
-        const idx = data.findIndex(nd => nd.year === d.year);
+        const idx = data.findIndex(nd => nd.period === d.period);
         onBarClickRef.current?.(idx);
       })
-      .transition().duration(hasAnimatedRef.current ? 0 : 1200).ease(d3.easeCubicOut)
+      .transition().duration(hasAnimatedRef.current ? 0 : 850).ease(d3.easeCubicOut)
       .attr('y', d => y(d.value))
       .attr('height', d => H - y(d.value));
 
     if (!hasAnimatedRef.current) {
       setTimeout(() => {
         hasAnimatedRef.current = true;
-      }, 1200);
+      }, 850);
     }
 
     // Labels (Always rendered, visibility controlled by prop)
     svg.selectAll('.bar-label').data(data).enter().append('text')
       .attr('class', 'bar-label')
-      .attr('x', d => x(d.year.toString())! + x.bandwidth() / 2).attr('y', d => y(d.value) - (isMobile ? 13 : 20))
+      .attr('x', d => x(d.period.toString())! + x.bandwidth() / 2).attr('y', d => y(d.value) - (isMobile ? 13 : 20))
       .attr('text-anchor', 'middle').attr('font-size', isMobile ? '6.5px' : '11px').attr('font-weight', '700')
-      .attr('fill', '#101828').attr('opacity', showLabels ? 1 : 0)
+      .attr('fill', '#101828').attr('opacity', 0)
       .text(d => `$${Math.round(d.value)}${isMobile ? '' : 'B'}`)
-      .transition().duration(500).attr('opacity', showLabels ? 1 : 0);
+      .transition().delay(hasAnimatedRef.current ? 0 : 550).duration(hasAnimatedRef.current ? 0 : 400)
+      .attr('opacity', showLabels ? 1 : 0);
 
     svg.selectAll('.growth-label').data(data).enter().append('text')
       .attr('class', 'growth-label')
-      .attr('x', d => x(d.year.toString())! + x.bandwidth() / 2).attr('y', d => y(d.value) - 6)
+      .attr('x', d => x(d.period.toString())! + x.bandwidth() / 2).attr('y', d => y(d.value) - 6)
       .attr('text-anchor', 'middle').attr('font-size', isMobile ? '7px' : '10px').attr('font-weight', '700')
-      .attr('fill', d => d.growth >= 0 ? '#2ecc71' : '#e74c3c').attr('opacity', showPct ? 1 : 0)
-      .text(d => `${d.growth > 0 ? '+' : ''}${d.growth}%`);
-
-    // Projection line
-    svg.append('line').attr('x1', 0).attr('x2', W).attr('y1', projY).attr('y2', projY)
-      .attr('stroke', config.gradients.future.top).attr('stroke-width', 1.5)
-      .attr('stroke-dasharray', '5,5').attr('opacity', 0.3);
+      .attr('fill', d => d.growth >= 0 ? '#2ecc71' : '#e74c3c').attr('opacity', 0)
+      .text(d => `${d.growth > 0 ? '+' : ''}${d.growth}%`)
+      .transition().delay(hasAnimatedRef.current ? 0 : 550).duration(hasAnimatedRef.current ? 0 : 400)
+      .attr('opacity', showPct ? 1 : 0);
 
     // Tooltip
-    // Use the container as the tooltip parent for absolute positioning
     let tooltip = d3.select(containerRef.current).select<HTMLDivElement>('.d3-tooltip');
     if (tooltip.empty()) {
       tooltip = d3.select(containerRef.current).append('div').attr('class', 'd3-tooltip') as any;
@@ -262,7 +317,7 @@ const D3ChartComponent = ({
     const hLine = ig.append('line').attr('x1', 0).attr('x2', W).attr('stroke', '#475569')
       .attr('stroke-width', 1.5).attr('stroke-dasharray', '4,4').style('opacity', 0);
 
-    // Y-Axis Interactive Label (Pill at the right corner)
+    // Y-Axis Interactive Label
     const yLabel = ig.append('g').style('opacity', 0);
     yLabel.append('rect')
       .attr('x', 0).attr('y', -10).attr('width', 52).attr('height', 20).attr('rx', 10)
@@ -273,15 +328,15 @@ const D3ChartComponent = ({
 
     overlay.on('mousemove', (event: MouseEvent) => {
       const [mx, my] = d3.pointer(event);
+      const isTipEnabled = showTooltipRef.current;
       vLine.raise().attr('x1', mx).attr('x2', mx).attr('y1', 0).attr('y2', H).style('opacity', 1);
       hLine.raise().attr('x1', 0).attr('x2', W).attr('y1', my).attr('y2', my).style('opacity', 1);
 
-      // Update Y-Axis Pill Label
       const yVal = y.invert(my);
       const unit = config.yMax >= 1000 ? 'T' : 'B';
       const factor = config.yMax >= 1000 ? 1000 : 1;
       const formattedVal = (yVal / factor).toFixed(1);
-      
+
       yLabel.attr('transform', `translate(${W + 12}, ${my})`).style('opacity', 1);
       yLabelText.text(`$${formattedVal}${unit}`);
 
@@ -289,8 +344,8 @@ const D3ChartComponent = ({
       const range = x.range();
       const step = x.step();
       const index = Math.floor((mx - range[0]) / step);
-      const yearStr = domain[index];
-      const d = data.find(nd => nd.year.toString() === yearStr);
+      const periodStr = domain[index];
+      const d = data.find(nd => nd.period.toString() === periodStr);
 
       if (d) {
         onHoverRef.current?.(d);
@@ -298,21 +353,17 @@ const D3ChartComponent = ({
         onHoverRef.current?.(null);
       }
 
-      svg.selectAll('.bar').classed('bar-highlight', (nd: any) => nd.year.toString() === yearStr);
+      svg.selectAll('.bar').classed('bar-highlight', (nd: any) => nd.period.toString() === periodStr && isTipEnabled);
 
-      if (showTooltip && tooltipRef.current && d) {
-        const rect = containerRef.current!.getBoundingClientRect();
-        const barX = x(d.year.toString())!;
+      if (isTipEnabled && tooltipRef.current && d) {
+        const barX = x(d.period.toString())!;
         const barY = y(d.value);
-
-        // Calculate position relative to the CONTAINER
         const absoluteX = margin.left + barX;
         const absoluteY = margin.top + barY;
-
         const growthColor = d.growth >= 0 ? '#027a48' : '#b42318';
         const growthPrefix = d.growth > 0 ? '+' : '';
+        const isQuarterly = config.id.includes('quarter');
 
-        // Determine horizontal alignment to keep tooltip in view
         const tooltipWidth = isMobile ? 140 : 200;
         let leftValue = absoluteX - (tooltipWidth / 2);
         if (leftValue < 5) leftValue = 5;
@@ -326,26 +377,28 @@ const D3ChartComponent = ({
           .style('box-shadow', '0 12px 16px -4px rgba(16, 24, 40, 0.08), 0 4px 6px -2px rgba(16, 24, 40, 0.03)')
           .style('position', 'absolute')
           .style('left', `${leftValue}px`)
-          .style('top', `${absoluteY - (isMobile ? 85 : 110)}px`) // Position above the bar
+          .style('top', `${absoluteY - (isMobile ? 85 : 110)}px`)
           .style('z-index', '100')
           .style('pointer-events', 'none')
           .style('transition', 'left 0.1s ease-out, top 0.1s ease-out')
           .html(`
             <div style="display: flex; flex-direction: column; gap: ${isMobile ? '4px' : '8px'}; min-width: ${isMobile ? '120px' : '170px'}; text-align: left;">
               <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span style="color: #667085; font-size: ${isMobile ? '11px' : '13px'}; font-weight: 500;">Date:</span>
-                <span style="font-weight: 700; color: #101828; font-size: ${isMobile ? '11px' : '13px'};">Dec 31, ${d.year}</span>
+                <span style="color: #667085; font-size: ${isMobile ? '11px' : '13px'}; font-weight: 500;">${isQuarterly ? 'Quarter' : 'Date'}:</span>
+                <span style="font-weight: 700; color: #101828; font-size: ${isMobile ? '11px' : '13px'};">${isQuarterly ? '' : 'Dec 31, '}${d.period}</span>
               </div>
               <div style="display: flex; justify-content: space-between; align-items: center;">
                 <span style="color: #667085; font-size: ${isMobile ? '11px' : '13px'}; font-weight: 500;">${config.title}:</span>
                 <span style="font-weight: 700; color: #101828; font-size: ${isMobile ? '11px' : '13px'};">$${d.value.toFixed(1)}B</span>
               </div>
               <div style="display: flex; justify-content: space-between; align-items: center;">
-                <span style="color: #667085; font-size: ${isMobile ? '11px' : '13px'}; font-weight: 500;">% YoY:</span>
+                <span style="color: #667085; font-size: ${isMobile ? '11px' : '13px'}; font-weight: 500;">% ${isQuarterly ? 'QoQ' : 'YoY'}:</span>
                 <span style="font-weight: 700; color: ${growthColor}; font-size: ${isMobile ? '11px' : '13px'};">${growthPrefix}${d.growth}%</span>
               </div>
             </div>
           `);
+      } else {
+        tooltipRef.current?.style('display', 'none').style('opacity', '0');
       }
     }).on('mouseout', () => {
       vLine.style('opacity', 0);
@@ -355,45 +408,61 @@ const D3ChartComponent = ({
       tooltipRef.current?.style('display', 'none');
       onHoverRef.current?.(null);
     });
-  }, [config]); // Critical: buildChart now only depends on structural data
+  }, [config]);
 
-  // Non-destructive style updates effect
+  const isMountedRef = useRef(false);
+
   useEffect(() => {
+    if (!isMountedRef.current) {
+      isMountedRef.current = true;
+      return;
+    }
     const s = svgRef.current;
     if (!s) return;
 
-    // Toggle Grid
+    const activeColor = barColor || config.gradients.future.top;
+
     s.selectAll('.grid-vertical').style('display', showGrid ? 'block' : 'none');
     s.selectAll('.grid-horizontal').style('display', showGrid ? 'block' : 'none');
 
-    // Update Bar Color via Gradient Definition
-    d3.select('#past-gradient stop').attr('stop-color', barColor || config.gradients.past.top);
+    const gradId = `barGradient-${config.id.replace(/\s+/g, '-')}`;
+    const grad = d3.select(containerRef.current).select(`#${gradId}`);
+    grad.select('.stop-left').attr('stop-color', activeColor);
+    grad.select('.stop-right').attr('stop-color', activeColor);
 
-    // Toggle Labels (immediately, no re-animation)
+    const fGradId = `futureGradient-${config.id.replace(/\s+/g, '-')}`;
+    const fGrad = d3.select(containerRef.current).select(`#${fGradId}`);
+    fGrad.select('.future-stop-top').attr('stop-color', activeColor);
+    fGrad.select('.future-stop-bottom').attr('stop-color', activeColor);
+
+    s.select('.future-top-line').attr('stroke', activeColor);
+    s.select('.future-text-label').attr('fill', activeColor);
+    s.select('.projection-dash').attr('stroke', activeColor);
+    s.select('.projection-pill').attr('fill', activeColor);
+    s.select('.projection-dash-horizontal').attr('stroke', activeColor);
+
     s.selectAll('.bar-label').style('opacity', showLabels ? 1 : 0);
     s.selectAll('.growth-label').style('opacity', showPct ? 1 : 0);
 
-  }, [showGrid, showLabels, showPct, barColor, config.gradients.past.top]);
+  }, [
+    showGrid, showLabels, showPct, barColor,
+    config.id, config.gradients.past.top, config.gradients.past.bottom,
+    config.gradients.future.top, config.gradients.future.bottom
+  ]);
 
-  // Build chart on mount / config change
   useEffect(() => {
     buildChart();
     const handleResize = () => {
       if (!containerRef.current) return;
       const newWidth = containerRef.current.getBoundingClientRect().width;
-      // Only rebuild if width changes significantly (> 20px)
-      // This ignores small height changes like address bar hiding on mobile
       if (Math.abs(newWidth - lastWidthRef.current) > 20) {
         lastWidthRef.current = newWidth;
         buildChart();
       }
     };
-    
-    // Initial width capture
     if (containerRef.current) {
       lastWidthRef.current = containerRef.current.getBoundingClientRect().width;
     }
-
     window.addEventListener('resize', handleResize);
     return () => {
       window.removeEventListener('resize', handleResize);
@@ -401,8 +470,14 @@ const D3ChartComponent = ({
     };
   }, [buildChart]);
 
-  // Play animation
   useEffect(() => {
+    if (!showTooltip && tooltipRef.current) {
+      tooltipRef.current.style('display', 'none').style('opacity', '0');
+    }
+  }, [showTooltip]);
+
+  useEffect(() => {
+    const activeColor = barColor || config.gradients.future.top;
     if (!isPlaying) {
       if (playIntervalRef.current) clearInterval(playIntervalRef.current);
       playIntervalRef.current = null;
@@ -411,29 +486,21 @@ const D3ChartComponent = ({
       if (svg && yRef.current && xRef.current) {
         const y = yRef.current;
         const H = heightRef.current;
-
-        // Rapidly finish remaining bars with a stagger
+        svg.selectAll('.bar, .bar-label, .growth-label').interrupt();
         svg.selectAll('.bar')
-          .interrupt()
-          .transition()
-          .delay((_, i) => Math.max(0, i - playIndexRef.current) * 40)
-          .duration(500)
-          .ease(d3.easeCubicOut)
+          .transition().duration(400).ease(d3.easeCubicOut)
           .attr('opacity', 1)
           .attr('y', (d: any) => y(d.value))
           .attr('height', (d: any) => H - y(d.value));
 
-        svg.selectAll('.bar-label,.growth-label')
-          .interrupt()
-          .transition()
-          .delay((_, i) => Math.max(0, i - playIndexRef.current) * 40)
-          .duration(500)
-          .ease(d3.easeCubicOut)
-          .attr('opacity', 1)
+        svg.selectAll('.bar-label, .growth-label')
+          .transition().duration(400).ease(d3.easeCubicOut)
+          .attr('opacity', function (this: any) {
+            const isLabel = d3.select(this).classed('bar-label');
+            return isLabel ? (showLabels ? 1 : 0) : (showPct ? 1 : 0);
+          })
           .attr('transform', 'translate(0,0)');
-
-        svg.selectAll('.play-callout,.play-ring').remove();
-        onPlayFinishRef.current();
+        svg.selectAll('.play-callout, .play-ring').remove();
       }
       return;
     }
@@ -448,56 +515,44 @@ const D3ChartComponent = ({
 
     if (!svg || !x || !y) return;
 
-    // Reset or prepare bars
+    svg.selectAll('.bar, .bar-label, .growth-label, .play-callout, .play-ring').interrupt();
+    svg.selectAll('.play-callout, .play-ring').remove();
     svg.selectAll('.bar').attr('opacity', 0.08).attr('y', H).attr('height', 0);
-    svg.selectAll('.bar-label,.growth-label').attr('opacity', 0);
-    svg.selectAll('.play-callout,.play-ring').remove();
+    svg.selectAll('.bar-label, .growth-label').attr('opacity', 0).attr('transform', 'translate(0,10)');
 
-    // If starting mid-way, show previous bars immediately
     if (playIndex > 0) {
-      svg.selectAll('.bar').filter((_: any, i: number) => i < playIndex)
-        .attr('opacity', 1)
-        .attr('y', (d: any) => y(d.value))
-        .attr('height', (d: any) => H - y(d.value));
-
-      if (showLabels) {
-        svg.selectAll('.bar-label').filter((_: any, i: number) => i < playIndex)
-          .attr('opacity', 1).attr('transform', 'translate(0,0)');
-      }
-      if (showPct) {
-        svg.selectAll('.growth-label').filter((_: any, i: number) => i < playIndex)
-          .attr('opacity', 1).attr('transform', 'translate(0,0)');
-      }
+      svg.selectAll('.bar').filter((_: any, i: number) => i < playIndex).attr('opacity', 1).attr('y', (d: any) => y(d.value)).attr('height', (d: any) => H - y(d.value));
+      svg.selectAll('.bar-label').filter((_: any, i: number) => i < playIndex).attr('opacity', showLabels ? 1 : 0).attr('transform', 'translate(0,0)');
+      svg.selectAll('.growth-label').filter((_: any, i: number) => i < playIndex).attr('opacity', showPct ? 1 : 0).attr('transform', 'translate(0,0)');
     }
 
-    const stepMs = 180; // Faster interval for overlap
-    const rise = 1000;  // Longer, softer rise duration (exceeds stepMs for overlap)
+    const stepMs = 120;
+    const rise = 700;
 
     function playStep() {
       const i = playIndexRef.current;
       const d = data[i];
-      if (!d || !svgRef.current || !xRef.current || !yRef.current) return;
-      const s = svgRef.current, xS = xRef.current, yS = yRef.current;
+      if (!d || !svgRef.current || !yRef.current) return;
+      const s = svgRef.current, yS = yRef.current;
       const barY = yS(d.value);
-      const lDelay = 150;
+      const lDelay = 100;
 
-      s.selectAll('.bar').filter((_: unknown, idx: number) => idx === i)
+      s.selectAll('.bar').filter((_: any, idx: number) => idx === i)
+        .interrupt()
         .attr('y', H).attr('height', 0).attr('opacity', 0)
-        .attr('fill', (nd: unknown) => (nd as { status: string }).status === 'past' ? 'url(#past-gradient)' : 'url(#future-gradient)')
+        .attr('fill', activeColor)
         .transition().duration(rise).ease(d3.easeCubicOut)
         .attr('y', barY).attr('height', H - barY).attr('opacity', 1);
 
-      s.selectAll('.bar-label').filter((_: unknown, idx: number) => idx === i)
-        .attr('opacity', 0).attr('transform', 'translate(0,10)')
+      s.selectAll('.bar-label').filter((_: any, idx: number) => idx === i)
+        .interrupt()
         .transition().delay(lDelay).duration(rise).ease(d3.easeCubicOut)
-        .attr('opacity', 1).attr('transform', 'translate(0,0)');
+        .attr('opacity', showLabels ? 1 : 0).attr('transform', 'translate(0,0)');
 
-      s.selectAll('.growth-label').filter((_: unknown, idx: number) => idx === i)
-        .attr('opacity', 0).attr('transform', 'translate(0,10)')
+      s.selectAll('.growth-label').filter((_: any, idx: number) => idx === i)
+        .interrupt()
         .transition().delay(lDelay + 50).duration(rise).ease(d3.easeCubicOut)
-        .attr('opacity', 1).attr('transform', 'translate(0,0)');
-
-      s.selectAll('.play-callout,.play-ring').remove();
+        .attr('opacity', showPct ? 1 : 0).attr('transform', 'translate(0,0)');
     }
 
     playStep();
@@ -507,11 +562,9 @@ const D3ChartComponent = ({
       if (playIndexRef.current >= data.length) {
         clearInterval(playIntervalRef.current!);
         playIntervalRef.current = null;
-
-        // Wait for the final rise transition to complete before cleanup
         setTimeout(() => {
           const s = svgRef.current;
-          if (s && isPlayingRef.current) { // Check if we haven't already switched views
+          if (s && isPlayingRef.current) {
             s.selectAll('.bar').interrupt().attr('opacity', 1);
             s.selectAll('.bar-label,.growth-label').interrupt().attr('opacity', 1).attr('transform', 'translate(0,0)');
             s.selectAll('.play-callout,.play-ring').transition().duration(500).attr('opacity', 0).remove();

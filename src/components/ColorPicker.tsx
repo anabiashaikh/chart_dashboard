@@ -73,15 +73,33 @@ export default function ColorPicker({ color, onChange }: ColorPickerProps) {
 
   const svRef = useRef<HTMLDivElement>(null);
   const hueRef = useRef<HTMLDivElement>(null);
+  const isDragging = useRef(false);
+  const lastEmittedHex = useRef(color);
 
   const rgb = useMemo(() => hsvToRgb(hsv.h, hsv.s, hsv.v), [hsv]);
   const hex = useMemo(() => rgbToHex(rgb.r, rgb.g, rgb.b), [rgb]);
 
+  // 1. Sync internal HSV state if external 'color' prop changes (but ignore if WE caused it)
   useEffect(() => {
-    onChange('#' + hex);
+    if (isDragging.current) return;
+    if (color.toLowerCase() === lastEmittedHex.current.toLowerCase()) return;
+    
+    const { r, g, b } = hexToRgb(color.replace('#', '').padStart(6, '0'));
+    setHsv(rgbToHsv(r, g, b));
+    lastEmittedHex.current = color;
+  }, [color]);
+
+  // 2. Notify parent of internal changes
+  useEffect(() => {
+    const newHex = '#' + hex;
+    if (newHex.toLowerCase() !== color.toLowerCase()) {
+      lastEmittedHex.current = newHex;
+      onChange(newHex);
+    }
   }, [hex, onChange]);
 
   const handleSvDown = (e: React.MouseEvent | React.TouchEvent) => {
+    isDragging.current = true;
     const move = (event: MouseEvent | TouchEvent) => {
       if (!svRef.current) return;
       const rect = svRef.current.getBoundingClientRect();
@@ -92,6 +110,7 @@ export default function ColorPicker({ color, onChange }: ColorPickerProps) {
       setHsv(prev => ({ ...prev, s, v }));
     };
     const up = () => {
+      isDragging.current = false;
       window.removeEventListener('mousemove', move);
       window.removeEventListener('mouseup', up);
       window.removeEventListener('touchmove', move);
@@ -105,6 +124,7 @@ export default function ColorPicker({ color, onChange }: ColorPickerProps) {
   };
 
   const handleHueDown = (e: React.MouseEvent | React.TouchEvent) => {
+    isDragging.current = true;
     const move = (event: MouseEvent | TouchEvent) => {
       if (!hueRef.current) return;
       const rect = hueRef.current.getBoundingClientRect();
@@ -113,6 +133,7 @@ export default function ColorPicker({ color, onChange }: ColorPickerProps) {
       setHsv(prev => ({ ...prev, h }));
     };
     const up = () => {
+      isDragging.current = false;
       window.removeEventListener('mousemove', move);
       window.removeEventListener('mouseup', up);
       window.removeEventListener('touchmove', move);

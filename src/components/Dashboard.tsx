@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { CHARTS_CONFIG, CHART_IDS, DataPoint } from '@/data/chartsData';
 import D3Chart from '@/components/D3Chart';
 import MiniChartCard from '@/components/MiniChartCard';
@@ -17,11 +17,12 @@ export default function Dashboard() {
   const [playIndex, setPlayIndex] = useState(0);
   const [hoveredPoint, setHoveredPoint] = useState<DataPoint | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const settingsRef = useRef<HTMLDivElement>(null);
   const [showLabels, setShowLabels] = useState(true);
   const [showPct, setShowPct] = useState(true);
   const [showTooltip, setShowTooltip] = useState(true);
   const [showGrid, setShowGrid] = useState(true);
-  const [barColor, setBarColor] = useState<string | null>(null);
+  const [customColors, setCustomColors] = useState<Record<string, string>>({});
   const [showFooterPicker, setShowFooterPicker] = useState(false);
   const [settingsColorOpen, setSettingsColorOpen] = useState(false);
 
@@ -32,6 +33,17 @@ export default function Dashboard() {
     setPlayIndex(0);
     setCurrentChartId(chartId);
   }, []);
+
+  const handleColorChange = useCallback((color: string | null) => {
+    setCustomColors(prev => {
+      if (color === null) {
+        const next = { ...prev };
+        delete next[currentChartId];
+        return next;
+      }
+      return { ...prev, [currentChartId]: color };
+    });
+  }, [currentChartId]);
 
   const handlePlayToggle = () => {
     if (analysisMode !== 'bars') setAnalysisMode('bars');
@@ -47,10 +59,21 @@ export default function Dashboard() {
     setIsPlaying(false);
   }, []);
 
+  // Close settings when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (showSettings && settingsRef.current && !settingsRef.current.contains(event.target as Node)) {
+        setShowSettings(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showSettings]);
+
   const statsArr = Object.values(cfg.stats);
 
   return (
-    <div className="dashboard-container" onClick={() => setShowSettings(false)}>
+    <div className="dashboard-container">
       {/* Header Tabs at the very top */}
       <div className="top-nav-tabs">
         <button
@@ -115,7 +138,11 @@ export default function Dashboard() {
               ⋮ Settings
             </button>
             {showSettings && (
-              <div className="settings-panel open" onClick={e => e.stopPropagation()}>
+              <div 
+                ref={settingsRef}
+                className="settings-panel open" 
+                onClick={e => e.stopPropagation()}
+              >
                 <div className="settings-title">Settings</div>
                 <div className="settings-divider" />
 
@@ -145,14 +172,17 @@ export default function Dashboard() {
                   style={{ padding: '7px 16px', display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}
                   onClick={() => setSettingsColorOpen(!settingsColorOpen)}
                 >
-                  <span style={{ width: '18px', height: '18px', borderRadius: '50%', background: barColor || '#00AD07', display: 'block' }}></span>
+                  <span style={{ width: '18px', height: '18px', borderRadius: '50%', background: customColors[currentChartId] || cfg.gradients.future.top, display: 'block' }}></span>
                   <span style={{ fontSize: '14px', fontWeight: '500' }}>Color</span>
                   <i style={{ marginLeft: 'auto', fontSize: '10px', transition: 'transform 0.2s', transform: settingsColorOpen ? 'rotate(180deg)' : 'none' }}>▼</i>
                 </div>
 
                 {settingsColorOpen && (
                   <div className="settings-side-picker" onClick={e => e.stopPropagation()}>
-                    <ColorPicker color={barColor || '#00AD07'} onChange={setBarColor} />
+                   <ColorPicker 
+                     color={customColors[currentChartId] || cfg.gradients.future.top} 
+                     onChange={handleColorChange} 
+                   />
                   </div>
                 )}
               </div>
@@ -186,8 +216,10 @@ export default function Dashboard() {
                   ) : (
                     <>
                       <div className="info-item">
-                        <span className="info-label"><i className="icon-calendar"></i> Year</span>
-                        <span className="info-value">{hoveredPoint.year}</span>
+                        <span className="info-label">
+                          <i className="icon-calendar"></i> {cfg.id.includes('quarter') ? 'Quarter' : 'Year'}
+                        </span>
+                        <span className="info-value">{hoveredPoint.period}</span>
                       </div>
                       <div className="info-item">
                         <span className="info-label"><i className="icon-chart"></i> {cfg.title}</span>
@@ -222,7 +254,7 @@ export default function Dashboard() {
                     showPct={showPct}
                     showTooltip={showTooltip}
                     showGrid={showGrid}
-                    barColor={barColor}
+                    barColor={customColors[currentChartId] || null}
                   />
                 </div>
               </div>
@@ -290,7 +322,10 @@ export default function Dashboard() {
                   <h3>Customize Dashboard Colors</h3>
                   <button className="close-btn" onClick={() => setShowFooterPicker(false)}>✕</button>
                 </div>
-                <ColorPicker color={barColor || '#00AD07'} onChange={setBarColor} />
+                 <ColorPicker 
+                  color={customColors[currentChartId] || cfg.gradients.future.top} 
+                  onChange={handleColorChange} 
+                />
               </div>
             )}
           </div>
