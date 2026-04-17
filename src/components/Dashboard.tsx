@@ -64,6 +64,7 @@ export default function Dashboard() {
     function handleClickOutside(event: MouseEvent) {
       if (showSettings && settingsRef.current && !settingsRef.current.contains(event.target as Node)) {
         setShowSettings(false);
+        setSettingsColorOpen(false);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -133,7 +134,13 @@ export default function Dashboard() {
             <button
               className="control-btn"
               id="btn-settings"
-              onClick={(e) => { e.stopPropagation(); setShowSettings(s => !s); }}
+              onClick={(e) => { 
+                e.stopPropagation(); 
+                setShowSettings(s => {
+                  if (s) setSettingsColorOpen(false);
+                  return !s;
+                }); 
+              }}
             >
               ⋮ Settings
             </button>
@@ -308,27 +315,6 @@ export default function Dashboard() {
             ))}
           </div>
 
-          <div className="footer-options">
-            <button
-              className={`footer-opt-btn${showFooterPicker ? ' active' : ''}`}
-              onClick={() => setShowFooterPicker(!showFooterPicker)}
-            >
-              🎨 Color Options
-            </button>
-
-            {showFooterPicker && (
-              <div className="footer-color-picker">
-                <div className="picker-header">
-                  <h3>Customize Dashboard Colors</h3>
-                  <button className="close-btn" onClick={() => setShowFooterPicker(false)}>✕</button>
-                </div>
-                 <ColorPicker 
-                  color={customColors[currentChartId] || cfg.gradients.future.top} 
-                  onChange={handleColorChange} 
-                />
-              </div>
-            )}
-          </div>
         </div>
       )}
     </div>

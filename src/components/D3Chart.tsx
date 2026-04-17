@@ -75,9 +75,10 @@ const D3ChartComponent = ({
 
     const rect = containerRef.current.getBoundingClientRect();
     const totalWidth = rect.width || 900;
-    const data = config.data;
-
     const isMobile = totalWidth <= 640;
+    const minPixelsPerBar = isMobile ? 42 : 55;
+    const maxBars = Math.max(4, Math.floor(totalWidth / minPixelsPerBar));
+    const data = config.data.length > maxBars ? config.data.slice(-maxBars) : config.data;
     const margin = {
       top: 80,
       right: isMobile ? 45 : 100,
@@ -104,7 +105,7 @@ const D3ChartComponent = ({
       .attr('viewBox', `0 0 ${W + margin.left + margin.right} ${H + margin.top + margin.bottom}`)
       .attr('preserveAspectRatio', 'xMidYMid meet')
       .style('width', '100%')
-      .style('animation', 'chartFadeIn 0.4s ease');
+      .style('animation', hasAnimatedRef.current ? 'none' : 'chartFadeIn 0.4s ease');
 
     const svg = svgEl.append('g').attr('transform', `translate(${margin.left},${margin.top})`);
     svgRef.current = svg;
@@ -193,21 +194,21 @@ const D3ChartComponent = ({
         .attr('x1', lastBarX).attr('x2', W + 12).attr('y1', projY).attr('y2', projY)
         .attr('stroke', activeColor).attr('stroke-width', 2).attr('stroke-dasharray', '3,3');
 
-      // Structural Border Lines (Medium Grey)
-      const borderColor = '#94a3b8';
+      // Structural Border Lines (Dark Grey)
+      const borderColor = '#475569';
+
+      // Top Border Line for Future Section (at the very top) - Stay Themed
+      svg.append('line').attr('class', 'future-top-line').attr('x1', sepX).attr('x2', W).attr('y1', 0).attr('y2', 0)
+        .attr('stroke', activeColor).attr('stroke-width', 3);
 
       // Vertical Border Line at the end
       svg.append('line').attr('class', 'future-border-line')
         .attr('x1', W).attr('x2', W).attr('y1', 0).attr('y2', H)
         .attr('stroke', borderColor).attr('stroke-width', 1.5);
 
-      // Top Border Line for Future Section (at the very top) - Stay Themed
-      svg.append('line').attr('class', 'future-top-line').attr('x1', sepX).attr('x2', W).attr('y1', 0).attr('y2', 0)
-        .attr('stroke', activeColor).attr('stroke-width', 3);
-
       // Top Arrow (Sharper Triangle - Located at the border corner)
       svg.append('path')
-        .attr('d', `M ${W - 4}, 0 L ${W + 4}, 0 L ${W}, -6 Z`)
+        .attr('d', `M ${W - 4.5}, 1.5 L ${W + 4.5}, 1.5 L ${W}, -6.5 Z`)
         .attr('fill', borderColor);
 
       // Bottom Border Line
@@ -225,10 +226,9 @@ const D3ChartComponent = ({
     // X Axis
     svg.append('g').attr('transform', `translate(0,${H})`)
       .call(d3.axisBottom(x)
-        // If it's mobile, we also filter the ticks to show every 2nd year to guarantee no merging, while also reducing the font size.
-        .tickValues(isMobile ? x.domain().filter((_, i) => i % 2 === 0) : x.domain())
+        .tickValues(x.domain())
         .tickSize(0).tickPadding(isMobile ? 8 : 15))
-      .attr('font-family', 'Inter').attr('font-size', isMobile ? '7.5px' : '11px').attr('font-weight', isMobile ? '500' : '400').attr('color', '#94a3b8')
+      .attr('font-family', 'Inter').attr('font-size', isMobile ? '9px' : '11px').attr('font-weight', isMobile ? '500' : '400').attr('color', '#94a3b8')
       .select('.domain').remove();
 
     // Y Axis (Right side for labels)
@@ -285,8 +285,8 @@ const D3ChartComponent = ({
     // Labels (Always rendered, visibility controlled by prop)
     svg.selectAll('.bar-label').data(data).enter().append('text')
       .attr('class', 'bar-label')
-      .attr('x', d => x(d.period.toString())! + x.bandwidth() / 2).attr('y', d => y(d.value) - (isMobile ? 13 : 20))
-      .attr('text-anchor', 'middle').attr('font-size', isMobile ? '6.5px' : '11px').attr('font-weight', '700')
+      .attr('x', d => x(d.period.toString())! + x.bandwidth() / 2).attr('y', d => y(d.value) - (isMobile ? 12 : 20))
+      .attr('text-anchor', 'middle').attr('font-size', isMobile ? '8.5px' : '11px').attr('font-weight', '700')
       .attr('fill', '#101828').attr('opacity', 0)
       .text(d => `$${Math.round(d.value)}${isMobile ? '' : 'B'}`)
       .transition().delay(hasAnimatedRef.current ? 0 : 550).duration(hasAnimatedRef.current ? 0 : 400)
@@ -294,8 +294,8 @@ const D3ChartComponent = ({
 
     svg.selectAll('.growth-label').data(data).enter().append('text')
       .attr('class', 'growth-label')
-      .attr('x', d => x(d.period.toString())! + x.bandwidth() / 2).attr('y', d => y(d.value) - 6)
-      .attr('text-anchor', 'middle').attr('font-size', isMobile ? '7px' : '10px').attr('font-weight', '700')
+      .attr('x', d => x(d.period.toString())! + x.bandwidth() / 2).attr('y', d => y(d.value) - 4)
+      .attr('text-anchor', 'middle').attr('font-size', isMobile ? '8.5px' : '10px').attr('font-weight', '700')
       .attr('fill', d => d.growth >= 0 ? '#2ecc71' : '#e74c3c').attr('opacity', 0)
       .text(d => `${d.growth > 0 ? '+' : ''}${d.growth}%`)
       .transition().delay(hasAnimatedRef.current ? 0 : 550).duration(hasAnimatedRef.current ? 0 : 400)
@@ -310,7 +310,7 @@ const D3ChartComponent = ({
 
     // Crosshair overlay
     const overlay = svg.append('rect').attr('width', W).attr('height', H)
-      .attr('fill', 'transparent').attr('pointer-events', 'all');
+      .attr('fill', 'transparent').attr('pointer-events', 'all').style('touch-action', 'none');
     const ig = svg.append('g').attr('class', 'interaction-group').style('pointer-events', 'none');
     const vLine = ig.append('line').attr('y1', 0).attr('y2', H).attr('stroke', '#475569')
       .attr('stroke-width', 1.5).attr('stroke-dasharray', '4,4').style('opacity', 0);
@@ -326,7 +326,7 @@ const D3ChartComponent = ({
       .attr('x', 26).attr('y', 4).attr('fill', 'white').attr('font-size', '10px')
       .attr('text-anchor', 'middle').attr('font-weight', '700');
 
-    overlay.on('mousemove', (event: MouseEvent) => {
+    overlay.on('mousemove touchmove', (event: MouseEvent | TouchEvent) => {
       const [mx, my] = d3.pointer(event);
       const isTipEnabled = showTooltipRef.current;
       vLine.raise().attr('x1', mx).attr('x2', mx).attr('y1', 0).attr('y2', H).style('opacity', 1);
@@ -400,7 +400,7 @@ const D3ChartComponent = ({
       } else {
         tooltipRef.current?.style('display', 'none').style('opacity', '0');
       }
-    }).on('mouseout', () => {
+    }).on('mouseout touchend', () => {
       vLine.style('opacity', 0);
       hLine.style('opacity', 0);
       yLabel.style('opacity', 0);
@@ -408,6 +408,20 @@ const D3ChartComponent = ({
       tooltipRef.current?.style('display', 'none');
       onHoverRef.current?.(null);
     });
+
+    overlay.on('click', (event: MouseEvent) => {
+      const [mx] = d3.pointer(event);
+      const domain = x.domain();
+      const range = x.range();
+      const step = x.step();
+      const index = Math.floor((mx - range[0]) / step);
+      const periodStr = domain[index];
+      const idx = data.findIndex(nd => nd.period.toString() === periodStr);
+      if (idx !== -1) {
+        onBarClickRef.current?.(idx);
+      }
+    });
+
   }, [config]);
 
   const isMountedRef = useRef(false);
@@ -441,8 +455,13 @@ const D3ChartComponent = ({
     s.select('.projection-pill').attr('fill', activeColor);
     s.select('.projection-dash-horizontal').attr('stroke', activeColor);
 
-    s.selectAll('.bar-label').style('opacity', showLabels ? 1 : 0);
-    s.selectAll('.growth-label').style('opacity', showPct ? 1 : 0);
+    if (!isPlayingRef.current) {
+      s.selectAll('.bar-label').attr('opacity', showLabels ? 1 : 0);
+      s.selectAll('.growth-label').attr('opacity', showPct ? 1 : 0);
+    } else {
+      s.selectAll('.bar-label').filter((_: any, i: number) => i < playIndexRef.current).attr('opacity', showLabels ? 1 : 0);
+      s.selectAll('.growth-label').filter((_: any, i: number) => i < playIndexRef.current).attr('opacity', showPct ? 1 : 0);
+    }
 
   }, [
     showGrid, showLabels, showPct, barColor,
@@ -452,19 +471,24 @@ const D3ChartComponent = ({
 
   useEffect(() => {
     buildChart();
+    let resizeTimer: NodeJS.Timeout;
     const handleResize = () => {
-      if (!containerRef.current) return;
-      const newWidth = containerRef.current.getBoundingClientRect().width;
-      if (Math.abs(newWidth - lastWidthRef.current) > 20) {
-        lastWidthRef.current = newWidth;
-        buildChart();
-      }
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        if (!containerRef.current) return;
+        const newWidth = containerRef.current.getBoundingClientRect().width;
+        if (Math.abs(newWidth - lastWidthRef.current) > 5) {
+          lastWidthRef.current = newWidth;
+          buildChart();
+        }
+      }, 150);
     };
     if (containerRef.current) {
       lastWidthRef.current = containerRef.current.getBoundingClientRect().width;
     }
     window.addEventListener('resize', handleResize);
     return () => {
+      clearTimeout(resizeTimer);
       window.removeEventListener('resize', handleResize);
       tooltipRef.current?.remove();
     };
@@ -507,7 +531,11 @@ const D3ChartComponent = ({
 
     isPlayingRef.current = true;
     playIndexRef.current = playIndex;
-    const data = config.data;
+    const totalWidth = containerRef.current?.getBoundingClientRect().width || 900;
+    const isMobile = totalWidth <= 640;
+    const minPixelsPerBar = isMobile ? 42 : 55;
+    const maxBars = Math.max(4, Math.floor(totalWidth / minPixelsPerBar));
+    const data = config.data.length > maxBars ? config.data.slice(-maxBars) : config.data;
     const svg = svgRef.current;
     const x = xRef.current;
     const y = yRef.current;
@@ -540,7 +568,6 @@ const D3ChartComponent = ({
       s.selectAll('.bar').filter((_: any, idx: number) => idx === i)
         .interrupt()
         .attr('y', H).attr('height', 0).attr('opacity', 0)
-        .attr('fill', activeColor)
         .transition().duration(rise).ease(d3.easeCubicOut)
         .attr('y', barY).attr('height', H - barY).attr('opacity', 1);
 

@@ -155,7 +155,7 @@ export default function ColorPicker({ color, onChange }: ColorPickerProps) {
       <div 
         ref={svRef} 
         className="sv-canvas" 
-        style={{ backgroundColor: `#${baseHueHex}` }}
+        style={{ backgroundColor: `#${baseHueHex}`, touchAction: 'none' }}
         onMouseDown={handleSvDown}
         onTouchStart={handleSvDown}
       >
@@ -175,6 +175,7 @@ export default function ColorPicker({ color, onChange }: ColorPickerProps) {
       <div 
         ref={hueRef} 
         className="hue-slider"
+        style={{ touchAction: 'none' }}
         onMouseDown={handleHueDown}
         onTouchStart={handleHueDown}
       >
